@@ -266,9 +266,42 @@ describe('McpTrigger', () => {
 							json: {
 								mcpToolCall: { toolName: 'test-tool', arguments: { arg1: 'value1' } },
 								mcpMessageId: 'msg-123',
+								headers: {},
 							},
 						},
 					],
+				],
+			});
+		});
+
+		it('should include request headers in tool call workflow data', async () => {
+			const req = createMockRequest({
+				method: 'POST',
+				query: { sessionId: 'test-session' },
+				headers: { 'x-workspace': 'my-project', 'x-user-id': 'alice' },
+			});
+			const resp = createMockResponse();
+			const node = mock<INode>({ typeVersion: 2, name: 'MCP Server Trigger' });
+
+			mockMcpServer.getSessionId.mockReturnValue('test-session');
+			mockMcpServer.handlePostMessage.mockResolvedValue({
+				wasToolCall: true,
+				toolCallInfo: { toolName: 'test-tool', arguments: {} },
+				messageId: 'msg-123',
+				relaySessionId: undefined,
+				needsListToolsRelay: false,
+			});
+
+			mockContext.getWebhookName.mockReturnValue('default');
+			mockContext.getRequestObject.mockReturnValue(req as never);
+			mockContext.getResponseObject.mockReturnValue(resp as never);
+			mockContext.getNode.mockReturnValue(node);
+
+			const result = await mcpTrigger.webhook(mockContext);
+
+			expect(result).toMatchObject({
+				workflowData: [
+					[{ json: { headers: { 'x-workspace': 'my-project', 'x-user-id': 'alice' } } }],
 				],
 			});
 		});
@@ -414,10 +447,46 @@ describe('McpTrigger', () => {
 									messageId: 'msg-456',
 									marker: 'mcp_list_tools_request',
 								},
+								headers: {},
 							},
 						},
 					],
 				],
+			});
+		});
+
+		it('should include request headers in list tools relay workflow data', async () => {
+			const { validateWebhookAuthentication } = jest.requireMock(
+				'n8n-nodes-base/dist/nodes/Webhook/utils',
+			);
+			validateWebhookAuthentication.mockResolvedValue(undefined);
+
+			const req = createMockRequest({
+				method: 'POST',
+				query: { sessionId: 'test-session' },
+				headers: { 'x-workspace': 'my-project' },
+			});
+			const resp = createMockResponse();
+			const node = mock<INode>({ typeVersion: 2, name: 'MCP Server Trigger' });
+
+			mockMcpServer.getSessionId.mockReturnValue('test-session');
+			mockMcpServer.handlePostMessage.mockResolvedValue({
+				wasToolCall: false,
+				toolCallInfo: undefined,
+				messageId: 'msg-456',
+				relaySessionId: 'relay-session-789',
+				needsListToolsRelay: true,
+			});
+
+			mockContext.getWebhookName.mockReturnValue('default');
+			mockContext.getRequestObject.mockReturnValue(req as never);
+			mockContext.getResponseObject.mockReturnValue(resp as never);
+			mockContext.getNode.mockReturnValue(node);
+
+			const result = await mcpTrigger.webhook(mockContext);
+
+			expect(result).toMatchObject({
+				workflowData: [[{ json: { headers: { 'x-workspace': 'my-project' } } }]],
 			});
 		});
 	});
