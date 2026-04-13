@@ -2,6 +2,7 @@ import { McpServer, MCP_LIST_TOOLS_REQUEST_MARKER } from './McpServer';
 import type { CompressionResponse } from './transport';
 import { WebhookAuthorizationError } from 'n8n-nodes-base/dist/nodes/Webhook/error';
 import { validateWebhookAuthentication } from 'n8n-nodes-base/dist/nodes/Webhook/utils';
+import type { IncomingHttpHeaders } from 'http';
 import type { INodeTypeDescription, IWebhookFunctions, IWebhookResponseData } from 'n8n-workflow';
 import { NodeConnectionTypes, Node, nodeNameToToolName } from 'n8n-workflow';
 
@@ -153,6 +154,8 @@ export class McpTrigger extends Node {
 			throw error;
 		}
 
+		const headers: IncomingHttpHeaders = req.headers;
+
 		const node = context.getNode();
 		const serverName = node.typeVersion > 1 ? nodeNameToToolName(node) : 'n8n-mcp-server';
 		const mcpServer = McpServer.instance(context.logger);
@@ -184,6 +187,7 @@ export class McpTrigger extends Node {
 						const workflowData = {
 							...(toolCallInfo && { mcpToolCall: toolCallInfo }),
 							...(messageId && { mcpMessageId: messageId }),
+							headers,
 						};
 						return { noWebhookResponse: true, workflowData: [[{ json: workflowData }]] };
 					}
@@ -195,6 +199,7 @@ export class McpTrigger extends Node {
 								messageId,
 								marker: MCP_LIST_TOOLS_REQUEST_MARKER,
 							},
+							headers,
 						};
 						return { noWebhookResponse: true, workflowData: [[{ json: workflowData }]] };
 					}
