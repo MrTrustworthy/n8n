@@ -1,4 +1,5 @@
 import type { Tool } from '@langchain/core/tools';
+import type { IncomingHttpHeaders } from 'http';
 
 import type { SessionStore } from './SessionStore';
 
@@ -10,6 +11,8 @@ export interface RedisPublisher {
 
 export class RedisSessionStore implements SessionStore {
 	private tools: Record<string, Tool[]> = {};
+
+	private headers: Record<string, IncomingHttpHeaders> = {};
 
 	constructor(
 		private publisher: RedisPublisher,
@@ -29,6 +32,7 @@ export class RedisSessionStore implements SessionStore {
 	async unregister(sessionId: string): Promise<void> {
 		await this.publisher.clear(this.getSessionKey(sessionId));
 		delete this.tools[sessionId];
+		delete this.headers[sessionId];
 	}
 
 	getTools(sessionId: string): Tool[] | undefined {
@@ -41,5 +45,13 @@ export class RedisSessionStore implements SessionStore {
 
 	clearTools(sessionId: string): void {
 		delete this.tools[sessionId];
+	}
+
+	getHeaders(sessionId: string): IncomingHttpHeaders | undefined {
+		return this.headers[sessionId];
+	}
+
+	setHeaders(sessionId: string, headers: IncomingHttpHeaders): void {
+		this.headers[sessionId] = headers;
 	}
 }

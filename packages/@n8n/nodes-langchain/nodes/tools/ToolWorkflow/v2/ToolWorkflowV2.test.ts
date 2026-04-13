@@ -167,6 +167,74 @@ describe('WorkflowTool::WorkflowToolService', () => {
 			expect(result).toEqual([{ json: TEST_RESPONSE }]);
 		});
 
+		it('should extract __n8nMcpHeaders from query and pass them as headers in cloneWith inputData', async () => {
+			const toolParams = {
+				ctx: context,
+				name: 'TestTool',
+				description: 'Test Description',
+				itemIndex: 0,
+			};
+
+			const mockExecuteWorkflowResponse: ExecuteWorkflowData = {
+				data: [[{ json: { result: 'ok' } }]],
+				executionId: 'test-execution',
+			};
+
+			jest.spyOn(context, 'executeWorkflow').mockResolvedValueOnce(mockExecuteWorkflowResponse);
+			jest.spyOn(context, 'addInputData').mockReturnValue({ index: 0 });
+			jest.spyOn(context, 'getNodeParameter').mockReturnValue('database');
+			jest.spyOn(context, 'getWorkflowDataProxy').mockReturnValue({
+				$execution: { id: 'exec-id' },
+				$workflow: { id: 'workflow-id' },
+			} as unknown as IWorkflowDataProxyData);
+			jest.spyOn(context, 'cloneWith').mockReturnValue(context);
+
+			const tool = await service.createTool(toolParams);
+			const requestHeaders = { 'x-workspace': 'test-project', 'x-user-id': 'felix' };
+
+			// Simulate DirectExecutionStrategy injecting __n8nMcpHeaders into the args
+			await tool.func({ query: 'test query', __n8nMcpHeaders: requestHeaders });
+
+			// Headers should be in cloneWith's inputData, __n8nMcpHeaders stripped from query
+			expect(context.cloneWith).toHaveBeenCalledWith({
+				runIndex: 0,
+				inputData: [[{ json: { query: { query: 'test query' }, headers: requestHeaders } }]],
+			});
+		});
+
+		it('should not include __n8nMcpHeaders in sub-workflow items', async () => {
+			const toolParams = {
+				ctx: context,
+				name: 'TestTool',
+				description: 'Test Description',
+				itemIndex: 0,
+			};
+
+			const mockExecuteWorkflowResponse: ExecuteWorkflowData = {
+				data: [[{ json: { result: 'ok' } }]],
+				executionId: 'test-execution',
+			};
+
+			const executeWorkflowSpy = jest
+				.spyOn(context, 'executeWorkflow')
+				.mockResolvedValueOnce(mockExecuteWorkflowResponse);
+			jest.spyOn(context, 'addInputData').mockReturnValue({ index: 0 });
+			jest.spyOn(context, 'getNodeParameter').mockReturnValue('database');
+			jest.spyOn(context, 'getWorkflowDataProxy').mockReturnValue({
+				$execution: { id: 'exec-id' },
+				$workflow: { id: 'workflow-id' },
+			} as unknown as IWorkflowDataProxyData);
+			jest.spyOn(context, 'cloneWith').mockReturnValue(context);
+
+			const tool = await service.createTool(toolParams);
+
+			await tool.func({ query: 'test query', __n8nMcpHeaders: { 'x-custom': 'value' } });
+
+			// The items passed to executeWorkflow must not contain __n8nMcpHeaders
+			const items = executeWorkflowSpy.mock.calls[0][1] as Array<{ json: Record<string, unknown> }>;
+			expect(items[0].json).not.toHaveProperty('__n8nMcpHeaders');
+		});
+
 		it('should handle errors during tool execution', async () => {
 			const toolParams = {
 				ctx: context,

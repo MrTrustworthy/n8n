@@ -9,7 +9,7 @@ import type {
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'crypto';
 import type * as express from 'express';
-import type { IncomingMessage } from 'http';
+import type { IncomingHttpHeaders, IncomingMessage } from 'http';
 import type { Logger } from 'n8n-workflow';
 import { jsonParse, OperationalError } from 'n8n-workflow';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -180,6 +180,7 @@ export class McpServer {
 			messageId = MessageParser.getRequestId(message);
 			const callId = messageId ? `${sessionId}_${messageId}` : sessionId;
 			this.sessionManager.setTools(sessionId, tools);
+			this.sessionManager.setHeaders(sessionId, req.headers as IncomingHttpHeaders);
 
 			try {
 				await new Promise<void>((resolve) => {
@@ -472,6 +473,8 @@ export class McpServer {
 				throw new OperationalError('Tool not found');
 			}
 
+			const requestHeaders = this.sessionManager.getHeaders(extra.sessionId);
+
 			try {
 				if (this.executionCoordinator.isQueueMode()) {
 					const requestId = extra.requestId?.toString() ?? '';
@@ -487,6 +490,7 @@ export class McpServer {
 					const result = await strategy.executeTool(requestedTool, toolArguments, {
 						sessionId: extra.sessionId,
 						messageId: requestId,
+						requestHeaders,
 					});
 
 					return MessageFormatter.formatToolResult(result);
@@ -495,6 +499,7 @@ export class McpServer {
 				const result = await this.executionCoordinator.executeTool(requestedTool, toolArguments, {
 					sessionId: extra.sessionId,
 					messageId: extra.requestId?.toString(),
+					requestHeaders,
 				});
 
 				if (this.resolveFunctions[callId]) {

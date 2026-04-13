@@ -1,4 +1,5 @@
 import type { Tool } from '@langchain/core/tools';
+import type { IncomingHttpHeaders } from 'http';
 
 export interface SessionStore {
 	register(sessionId: string): Promise<void>;
@@ -7,4 +8,6 @@ export interface SessionStore {
 	getTools(sessionId: string): Tool[] | undefined;
 	setTools(sessionId: string, tools: Tool[]): void;
 	clearTools(sessionId: string): void;
+	getHeaders(sessionId: string): IncomingHttpHeaders | undefined;
+	setHeaders(sessionId: string, headers: IncomingHttpHeaders): void;
 }

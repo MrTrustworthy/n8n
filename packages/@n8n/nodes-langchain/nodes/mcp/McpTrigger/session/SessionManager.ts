@@ -1,5 +1,6 @@
 import type { Tool } from '@langchain/core/tools';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { IncomingHttpHeaders } from 'http';
 
 import type { SessionStore } from './SessionStore';
 import type { McpTransport } from '../transport/Transport';
@@ -56,6 +57,14 @@ export class SessionManager {
 
 	setTools(sessionId: string, tools: Tool[]): void {
 		this.store.setTools(sessionId, tools);
+	}
+
+	getHeaders(sessionId: string): IncomingHttpHeaders | undefined {
+		return this.store.getHeaders(sessionId);
+	}
+
+	setHeaders(sessionId: string, headers: IncomingHttpHeaders): void {
+		this.store.setHeaders(sessionId, headers);
 	}
 
 	setStore(store: SessionStore): void {

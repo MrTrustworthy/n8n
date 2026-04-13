@@ -29,6 +29,8 @@ import {
 
 import { createZodSchemaFromArgs, extractFromAIParameters } from '@n8n/ai-utilities';
 
+import { requestHeadersContext } from '../../../../mcp/McpTrigger/execution/requestHeadersContext';
+
 function isNodeExecutionData(data: unknown): data is INodeExecutionData[] {
 	return isArray(data) && Boolean(data.length) && isObject(data[0]) && 'json' in data[0];
 }
@@ -103,10 +105,21 @@ export class WorkflowToolService {
 				// We need to clone the context here to handle runIndex correctly
 				// Otherwise the runIndex will be shared between different executions
 				// Causing incorrect data to be passed to the sub-workflow and via $fromAI
+				// Try AsyncLocalStorage first, fall back to key injected directly in args
+				let requestHeaders =
+					(requestHeadersContext.getStore() as Record<string, unknown> | undefined) ??
+					(typeof query === 'object' && query !== null
+						? (query.__n8nMcpHeaders as Record<string, unknown> | undefined)
+						: undefined);
+				// Strip the injected key from the query before it reaches the sub-workflow
+				if (typeof query === 'object' && query !== null && '__n8nMcpHeaders' in query) {
+					const { __n8nMcpHeaders: _, ...queryWithout } = query;
+					query = queryWithout;
+				}
 				if ('cloneWith' in this.baseContext) {
 					context = this.baseContext.cloneWith({
 						runIndex: localRunIndex,
-						inputData: [[{ json: { query } }]],
+						inputData: [[{ json: { query, ...(requestHeaders && { headers: requestHeaders }) } }]],
 					});
 				}
 
@@ -131,7 +144,13 @@ export class WorkflowToolService {
 				}
 
 				try {
-					const response = await this.runFunction(context, query, itemIndex, runManager);
+					const response = await this.runFunction(
+						context,
+						query,
+						itemIndex,
+						runManager,
+						requestHeaders,
+					);
 
 					const processedResponse = this.handleToolResponse(response);
 
@@ -291,6 +310,7 @@ export class WorkflowToolService {
 		query: string | IDataObject,
 		itemIndex: number,
 		runManager?: CallbackManagerForToolRun,
+		requestHeaders?: Record<string, unknown>,
 	): Promise<IDataObject | INodeExecutionData[]> {
 		const source = context.getNodeParameter('source', itemIndex) as string;
 		const workflowProxy = context.getWorkflowDataProxy(0);
@@ -302,7 +322,13 @@ export class WorkflowToolService {
 			workflowProxy,
 		);
 		const rawData = this.prepareRawData(context, query, itemIndex);
-		const items = await this.prepareWorkflowItems(context, query, itemIndex, rawData);
+		const items = await this.prepareWorkflowItems(
+			context,
+			query,
+			itemIndex,
+			rawData,
+			requestHeaders,
+		);
 
 		this.subWorkflowId = workflowInfo.id;
 
@@ -385,6 +411,7 @@ export class WorkflowToolService {
 		query: string | IDataObject,
 		itemIndex: number,
 		rawData: IDataObject,
+		requestHeaders?: Record<string, unknown>,
 	): Promise<INodeExecutionData[]> {
 		const options: SetNodeOptions = { include: 'all' };
 		let jsonData = typeof query === 'object' ? query : { query };
@@ -392,6 +419,13 @@ export class WorkflowToolService {
 		if (this.useSchema) {
 			const currentWorkflowInputs = getCurrentWorkflowInputData.call(context);
 			jsonData = currentWorkflowInputs[itemIndex].json;
+			// Expression evaluation uses connectionInputData for $json, which may not include
+			// injected headers. Directly set headers if the expression produced nothing.
+			if (requestHeaders && !jsonData.headers) {
+				jsonData = { ...jsonData, headers: requestHeaders };
+			}
+		} else if (requestHeaders) {
+			jsonData = { ...jsonData, headers: requestHeaders };
 		}
 
 		const newItem = await manual.execute.call(
@@ -425,7 +459,8 @@ export class WorkflowToolService {
 		}
 
 		// Prepare Zod schema for the structured tool
-		const schema = createZodSchemaFromArgs(collectedArguments);
+		// Use passthrough() so injected keys (e.g. __n8nMcpHeaders) are preserved by Zod parsing
+		const schema = createZodSchemaFromArgs(collectedArguments).passthrough();
 
 		return new DynamicStructuredTool({ schema, name, description, func });
 	}

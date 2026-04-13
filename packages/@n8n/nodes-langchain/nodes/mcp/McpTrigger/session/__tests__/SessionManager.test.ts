@@ -14,6 +14,8 @@ describe('SessionManager', () => {
 			getTools: jest.fn(),
 			setTools: jest.fn(),
 			clearTools: jest.fn(),
+			getHeaders: jest.fn(),
+			setHeaders: jest.fn(),
 		};
 		manager = new SessionManager(mockStore);
 	});

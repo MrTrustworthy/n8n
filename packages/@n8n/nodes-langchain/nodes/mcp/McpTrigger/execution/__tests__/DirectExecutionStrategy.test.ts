@@ -80,6 +80,30 @@ describe('DirectExecutionStrategy', () => {
 			expect(tool.invoke).toHaveBeenCalledWith({ arg: 'value' });
 		});
 
+		it('should inject __n8nMcpHeaders into args when requestHeaders is provided', async () => {
+			const tool = createMockTool('test-tool', { invokeReturn: 'result' });
+			const requestHeaders = { 'x-workspace': 'test-project', 'x-user-id': 'felix' };
+
+			await strategy.executeTool(
+				tool,
+				{ query: 'hello' },
+				{ sessionId: 'session-1', requestHeaders },
+			);
+
+			expect(tool.invoke).toHaveBeenCalledWith({ query: 'hello', __n8nMcpHeaders: requestHeaders });
+		});
+
+		it('should not inject __n8nMcpHeaders when requestHeaders is absent', async () => {
+			const tool = createMockTool('test-tool', { invokeReturn: 'result' });
+
+			await strategy.executeTool(tool, { query: 'hello' }, { sessionId: 'session-1' });
+
+			expect(tool.invoke).toHaveBeenCalledWith({ query: 'hello' });
+			expect(tool.invoke).not.toHaveBeenCalledWith(
+				expect.objectContaining({ __n8nMcpHeaders: expect.anything() }),
+			);
+		});
+
 		it('should propagate TypeError from tool', async () => {
 			const tool = createMockTool('type-error-tool', {
 				invokeError: new TypeError('Invalid type'),
